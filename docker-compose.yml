@@ -1,0 +1,43 @@
+services:
+  localstack:
+    image: localstack/localstack:latest
+    container_name: localstack-s3
+    ports:
+      - "4566:4566"  # LocalStack Gateway
+      - "4510-4559:4510-4559"  # Serviços externos
+    environment:
+      - SERVICES=s3
+      - DEBUG=1
+      - DATA_DIR=/var/lib/localstack
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - PERSISTENCE=1
+    volumes:
+      - "localstack-data:/var/lib/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "./init-s3.sh:/etc/localstack/init/ready.d/init-s3.sh"
+    networks:
+      - localstack-network
+
+  backend:
+    build: ./backend
+    container_name: task-backend
+    ports:
+      - "3000:3000"
+    environment:
+      - AWS_ENDPOINT=http://localstack:4566
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - S3_BUCKET=shopping-images
+    depends_on:
+      - localstack
+    networks:
+      - localstack-network
+
+networks:
+  localstack-network:
+    driver: bridge
+
+volumes:
+  localstack-data:
+    driver: local

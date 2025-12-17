@@ -60,11 +60,15 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
 
   // CAMERA METHODS
   Future<void> _addPhoto() async {
+    print('📸 Abrindo diálogo de seleção de foto...');
     final photoPath =
         await CameraService.instance.showPhotoSourceDialog(context);
 
+    print('📸 Resultado do diálogo: $photoPath');
+
     if (photoPath != null && mounted) {
       setState(() => _photos.add(photoPath));
+      print('✅ Foto adicionada à lista: $_photos');
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -73,6 +77,8 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
           duration: const Duration(seconds: 2),
         ),
       );
+    } else {
+      print('⚠️ Nenhuma foto retornada ou widget não montado');
     }
   }
 
@@ -95,7 +101,28 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
           ),
           body: Center(
             child: InteractiveViewer(
-              child: Image.file(File(photoPath), fit: BoxFit.contain),
+              child: Image.file(
+                File(photoPath),
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) {
+                  print('❌ Erro ao carregar imagem: $photoPath - $error');
+                  return Container(
+                    color: Colors.black,
+                    child: const Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.broken_image,
+                            size: 80, color: Colors.white54),
+                        SizedBox(height: 16),
+                        Text(
+                          'Erro ao carregar imagem',
+                          style: TextStyle(color: Colors.white54, fontSize: 16),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -149,7 +176,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
 
     try {
       final provider = context.read<TaskProviderOffline>();
-      
+
       if (widget.task == null) {
         // CRIAR - Converter Task para TaskOffline
         final newTaskOffline = TaskOffline(
@@ -167,7 +194,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
           syncStatus: SyncStatus.pending,
           version: 1,
         );
-        
+
         await provider.createTask(newTaskOffline);
 
         if (mounted) {
@@ -192,7 +219,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
         // ATUALIZAR - Buscar TaskOffline existente ou criar novo
         final tasks = await provider.getTasks();
         TaskOffline existingTask;
-        
+
         try {
           existingTask = tasks.firstWhere(
             (t) => t.id == widget.task!.id.toString(),
@@ -215,7 +242,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
             version: 1,
           );
         }
-        
+
         final updatedTask = existingTask.copyWith(
           title: _titleController.text.trim(),
           description: _descriptionController.text.trim(),
@@ -227,7 +254,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
           locationName: _locationName,
           updatedAt: DateTime.now(),
         );
-        
+
         await provider.updateTask(updatedTask);
 
         if (mounted) {
@@ -447,6 +474,30 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                                           width: double.infinity,
                                           height: double.infinity,
                                           fit: BoxFit.cover,
+                                          errorBuilder:
+                                              (context, error, stackTrace) {
+                                            print(
+                                                '❌ Erro ao carregar imagem: ${_photos[index]} - $error');
+                                            return Container(
+                                              color: Colors.grey[300],
+                                              child: const Column(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  Icon(Icons.broken_image,
+                                                      size: 40,
+                                                      color: Colors.grey),
+                                                  SizedBox(height: 4),
+                                                  Text('Erro ao\ncarregar',
+                                                      textAlign:
+                                                          TextAlign.center,
+                                                      style: TextStyle(
+                                                          fontSize: 10,
+                                                          color: Colors.grey)),
+                                                ],
+                                              ),
+                                            );
+                                          },
                                         ),
                                       ),
                                     ),

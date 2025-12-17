@@ -4,6 +4,7 @@ import 'package:camera/camera.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
+import 'package:permission_handler/permission_handler.dart';
 import '../screens/camera_screen.dart';
 
 class CameraService {
@@ -26,8 +27,134 @@ class CameraService {
 
   bool get hasCameras => _cameras != null && _cameras!.isNotEmpty;
 
+  // Verificar e solicitar permissão de câmera
+  Future<bool> _checkCameraPermission(BuildContext context) async {
+    print('🔍 Verificando permissão de câmera...');
+    final status = await Permission.camera.status;
+    print('🔍 Status de permissão de câmera: $status');
+
+    if (status.isGranted) {
+      print('✅ Permissão de câmera já concedida');
+      return true;
+    }
+
+    if (status.isDenied) {
+      print('⚠️ Permissão de câmera negada, solicitando...');
+      final result = await Permission.camera.request();
+      print('🔍 Resultado da solicitação: $result');
+      if (result.isGranted) {
+        print('✅ Permissão de câmera concedida');
+        return true;
+      }
+    }
+
+    if (status.isPermanentlyDenied || status.isDenied) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+                'Permissão de câmera necessária. Por favor, ative nas configurações.'),
+            backgroundColor: Colors.orange,
+            action: SnackBarAction(
+              label: 'Configurações',
+              textColor: Colors.white,
+              onPressed: () => openAppSettings(),
+            ),
+          ),
+        );
+      }
+      return false;
+    }
+
+    return false;
+  }
+
+  // Verificar e solicitar permissão de galeria
+  Future<bool> _checkStoragePermission(BuildContext context) async {
+    // Para Android 13+ (API 33+), usar photos permission
+    if (Platform.isAndroid) {
+      final androidInfo = await Permission.photos.status;
+
+      if (androidInfo.isGranted) {
+        return true;
+      }
+
+      if (androidInfo.isDenied) {
+        final result = await Permission.photos.request();
+        if (result.isGranted) {
+          return true;
+        }
+
+        // Tentar storage para versões antigas do Android
+        final storageResult = await Permission.storage.request();
+        if (storageResult.isGranted) {
+          return true;
+        }
+      }
+
+      if (androidInfo.isPermanentlyDenied || androidInfo.isDenied) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                  'Permissão de galeria necessária. Por favor, ative nas configurações.'),
+              backgroundColor: Colors.orange,
+              action: SnackBarAction(
+                label: 'Configurações',
+                textColor: Colors.white,
+                onPressed: () => openAppSettings(),
+              ),
+            ),
+          );
+        }
+        return false;
+      }
+    } else if (Platform.isIOS) {
+      final status = await Permission.photos.status;
+
+      if (status.isGranted) {
+        return true;
+      }
+
+      if (status.isDenied) {
+        final result = await Permission.photos.request();
+        return result.isGranted;
+      }
+
+      if (status.isPermanentlyDenied) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                  'Permissão de galeria necessária. Por favor, ative nas configurações.'),
+              backgroundColor: Colors.orange,
+              action: SnackBarAction(
+                label: 'Configurações',
+                textColor: Colors.white,
+                onPressed: () => openAppSettings(),
+              ),
+            ),
+          );
+        }
+        return false;
+      }
+    }
+
+    return false;
+  }
+
   Future<String?> takePicture(BuildContext context) async {
+    print('📸 Iniciando takePicture...');
+
+    // Verificar permissão de câmera primeiro
+    final hasPermission = await _checkCameraPermission(context);
+    if (!hasPermission) {
+      print('❌ Permissão de câmera negada');
+      return null;
+    }
+
     if (!hasCameras) {
+      print('❌ Nenhuma câmera disponível');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('❌ Nenhuma câmera disponível'),
@@ -37,6 +164,7 @@ class CameraService {
       return null;
     }
 
+    print('✅ Inicializando câmera: ${_cameras!.first.name}');
     final camera = _cameras!.first;
     final controller = CameraController(
       camera,
@@ -112,15 +240,30 @@ class CameraService {
 
   // GALERIA DE FOTOS
   Future<String?> pickFromGallery(BuildContext context) async {
+    print('🖼️ Iniciando pickFromGallery...');
+
+    // Verificar permissão de galeria primeiro
+    final hasPermission = await _checkStoragePermission(context);
+    if (!hasPermission) {
+      print('❌ Permissão de galeria negada');
+      return null;
+    }
+
+    print('✅ Abrindo seletor de imagens...');
     try {
       final XFile? image = await _picker.pickImage(
         source: ImageSource.gallery,
         imageQuality: 85,
       );
 
-      if (image == null) return null;
+      if (image == null) {
+        print('⚠️ Nenhuma imagem selecionada');
+        return null;
+      }
 
+      print('✅ Imagem selecionada: ${image.path}');
       final savedPath = await savePicture(image);
+      print('✅ Imagem salva em: $savedPath');
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -191,9 +334,8 @@ class CameraService {
                 title: const Text('Tirar Foto'),
                 subtitle: const Text('Use a câmera do dispositivo'),
                 onTap: () async {
-                  Navigator.pop(context);
                   final photoPath = await takePicture(context);
-                  if (context.mounted && photoPath != null) {
+                  if (context.mounted) {
                     Navigator.pop(context, photoPath);
                   }
                 },
@@ -211,9 +353,8 @@ class CameraService {
                 title: const Text('Escolher da Galeria'),
                 subtitle: const Text('Selecione uma foto existente'),
                 onTap: () async {
-                  Navigator.pop(context);
                   final photoPath = await pickFromGallery(context);
-                  if (context.mounted && photoPath != null) {
+                  if (context.mounted) {
                     Navigator.pop(context, photoPath);
                   }
                 },

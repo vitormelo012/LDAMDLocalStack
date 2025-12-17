@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/task_provider_offline.dart';
 import 'screens/task_list_screen.dart';
+import 'services/camera_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Inicializar CameraService para detectar câmeras disponíveis
+  await CameraService.instance.initialize();
 
   runApp(const MyApp());
 }

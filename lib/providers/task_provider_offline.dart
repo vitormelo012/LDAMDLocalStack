@@ -4,12 +4,14 @@ import '../models/sync_operation.dart';
 import '../services/database_service_offline.dart';
 import '../services/sync_service_offline.dart';
 import '../services/connectivity_service_offline.dart';
+import '../services/s3_service.dart';
 
 /// Provider para gerenciamento de estado de tarefas
 class TaskProviderOffline with ChangeNotifier {
   final DatabaseServiceOffline _db = DatabaseServiceOffline.instance;
   final SyncServiceOffline _syncService;
   final ConnectivityServiceOffline _connectivity = ConnectivityServiceOffline.instance;
+  final S3Service _s3Service = S3Service();
 
   List<TaskOffline> _tasks = [];
   bool _isLoading = false;
@@ -89,7 +91,34 @@ class TaskProviderOffline with ChangeNotifier {
   /// Criar nova tarefa (sobrecarga para aceitar TaskOffline)
   Future<void> createTask(TaskOffline task) async {
     try {
-      await _syncService.createTask(task);
+      // Se estiver online e a tarefa tiver fotos, fazer upload para S3
+      TaskOffline taskToCreate = task;
+      
+      if (_isOnline && task.photos.isNotEmpty) {
+        print('📤 Fazendo upload de ${task.photos.length} foto(s) para S3...');
+        
+        final uploadedUrls = <String>[];
+        
+        for (final photoPath in task.photos) {
+          // Tenta fazer upload para S3
+          final s3Url = await _s3Service.uploadImage(photoPath);
+          
+          if (s3Url != null) {
+            uploadedUrls.add(s3Url);
+            print('✅ Foto enviada: $s3Url');
+          } else {
+            // Se falhar, mantém o caminho local
+            uploadedUrls.add(photoPath);
+            print('⚠️  Falha no upload, mantendo caminho local: $photoPath');
+          }
+        }
+        
+        // Atualizar a tarefa com as URLs do S3
+        taskToCreate = task.copyWith(photos: uploadedUrls);
+        print('✅ Upload de fotos concluído!');
+      }
+      
+      await _syncService.createTask(taskToCreate);
       await loadTasks();
     } catch (e) {
       _error = e.toString();
